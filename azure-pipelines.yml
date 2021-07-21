@@ -15,3 +15,15 @@ steps:
     SourceFolder: '$(System.DefaultWorkingDirectory)'
     Contents: '**'
     TargetFolder: '$(Build.ArtifactStagingDirectory)'
+- task: AzureResourceManagerTemplateDeployment@3
+  inputs:
+    deploymentScope: 'Resource Group'
+    azureResourceManagerConnection: 'Azure Training'
+    subscriptionId: 'a27dd098-1a6a-4384-977c-53bbf66ef042'
+    action: 'Create Or Update Resource Group'
+    resourceGroupName: 'RG-CTG-BHARAT-KT'
+    location: 'East US'
+    templateLocation: 'Linked artifact'
+    csmFile: '$(Build.ArtifactStagingDirectory)/azuredeploy.json'
+    csmParametersFile: '$(Build.ArtifactStagingDirectory)/azuredeploy.parameters.json'
+    deploymentMode: 'Incremental'
