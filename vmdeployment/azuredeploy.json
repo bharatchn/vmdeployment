@@ -1,0 +1,195 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "sto1Type": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS",
+        "Premium_LRS"
+      ]
+    },
+    "testvmName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "testvmAdminUserName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "testvmAdminPassword": {
+      "type": "securestring"
+    },
+    "testvmWindowsOSVersion": {
+      "type": "string",
+      "defaultValue": "2012-R2-Datacenter",
+      "allowedValues": [
+        "2008-R2-SP1",
+        "2012-Datacenter",
+        "2012-R2-Datacenter",
+        "Windows-Server-Technical-Preview"
+      ]
+    },
+    "testvmIPDnsName": {
+      "type": "string",
+      "minLength": 1
+    }},
+  "variables": {
+    "vnet1Prefix": "10.0.0.0/16",
+    "vnet1Subnet1Name": "Subnet-1",
+    "vnet1Subnet1Prefix": "10.0.0.0/24",
+    "vnet1Subnet2Name": "Subnet-2",
+    "vnet1Subnet2Prefix": "10.0.1.0/24",
+    "sto1Name": "[concat('sto1', uniqueString(resourceGroup().id))]",
+    "testvmImagePublisher": "MicrosoftWindowsServer",
+    "testvmImageOffer": "WindowsServer",
+    "testvmOSDiskName": "testvmOSDisk",
+    "testvmVmSize": "Standard_D2_v2",
+    "testvmVnetID": "[resourceId('Microsoft.Network/virtualNetworks', 'vnet1')]",
+    "testvmSubnetRef": "[concat(variables('testvmVnetID'), '/subnets/', variables('vnet1Subnet1Name'))]",
+    "testvmStorageAccountContainerName": "vhds",
+    "testvmNicName": "[concat(parameters('testvmName'), 'NetworkInterface')]",
+    "testvmIPName": "testvmIP"},
+  "resources": [
+    {
+      "name": "vnet1",
+      "type": "Microsoft.Network/virtualNetworks",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "vnet1"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[variables('vnet1Prefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('vnet1Subnet1Name')]",
+            "properties": {
+              "addressPrefix": "[variables('vnet1Subnet1Prefix')]"
+            }
+          },
+          {
+            "name": "[variables('vnet1Subnet2Name')]",
+            "properties": {
+              "addressPrefix": "[variables('vnet1Subnet2Prefix')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[variables('sto1Name')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-01-01",
+      "sku": {
+        "name": "[parameters('sto1Type')]"
+      },
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "sto1"
+      },
+      "kind": "Storage"
+    },
+    {
+      "name": "[variables('testvmNicName')]",
+      "type": "Microsoft.Network/networkInterfaces",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworks', 'vnet1')]",
+        "[resourceId('Microsoft.Network/publicIPAddresses', variables('testvmIPName'))]"
+      ],
+      "tags": {
+        "displayName": "testvmNic"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[variables('testvmSubnetRef')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('testvmIPName'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "[parameters('testvmName')]",
+      "type": "Microsoft.Compute/virtualMachines",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2015-06-15",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('sto1Name'))]",
+        "[resourceId('Microsoft.Network/networkInterfaces', variables('testvmNicName'))]"
+      ],
+      "tags": {
+        "displayName": "testvm"
+      },
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[variables('testvmVmSize')]"
+        },
+        "osProfile": {
+          "computerName": "[parameters('testvmName')]",
+          "adminUsername": "[parameters('testvmAdminUsername')]",
+          "adminPassword": "[parameters('testvmAdminPassword')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "[variables('testvmImagePublisher')]",
+            "offer": "[variables('testvmImageOffer')]",
+            "sku": "[parameters('testvmWindowsOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "name": "testvmOSDisk",
+            "vhd": {
+              "uri": "[concat(reference(resourceId('Microsoft.Storage/storageAccounts', variables('sto1Name')), '2016-01-01').primaryEndpoints.blob, variables('testvmStorageAccountContainerName'), '/', variables('testvmOSDiskName'), '.vhd')]"
+            },
+            "caching": "ReadWrite",
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('testvmNicName'))]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "[variables('testvmIPName')]",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2016-03-30",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "testvmIP"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic",
+        "dnsSettings": {
+          "domainNameLabel": "[parameters('testvmIPDnsName')]"
+        }
+      }
+    }],
+  "outputs": {}
+}
